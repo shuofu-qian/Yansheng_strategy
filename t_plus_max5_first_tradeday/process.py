@@ -40,15 +40,23 @@ def process_factors(daily_factors,data,industry):
     daily_factors = pd.merge(daily_factors,industry,how='inner',on=['asset']).drop(columns=['name','industry'])
 
     # change shape
-    daily_factors = daily_factors.set_index(['asset','datetime','weekday']).unstack(2)
-    daily_factors.columns = ["_".join(tuple) for tuple in daily_factors.columns]
+    # daily_factors = daily_factors.set_index(['asset','datetime','weekday']).unstack(2)
+    # daily_factors.columns = ["_".join(tuple) for tuple in daily_factors.columns]
+    # daily_factors= daily_factors.reset_index()
+
+    daily_factors = daily_factors.drop(columns=['weekday']).groupby(['asset','datetime']).aggregate(['mean'])
+    daily_factors.columns = ['_'.join(i) for i in daily_factors.columns]
     daily_factors= daily_factors.reset_index()
+
+    # daily_factors = daily_factors.drop(columns=['weekday']).groupby(['asset','datetime']).last()
+    # daily_factors= daily_factors.reset_index()
 
     # fillna
     columns = daily_factors.columns[2:]
     tmp = daily_factors.groupby('datetime')[columns].transform('mean')
     daily_factors.iloc[:,2:] = daily_factors.iloc[:,2:].fillna(tmp)
     daily_factors = daily_factors.fillna(0)
+    daily_factors = daily_factors.replace([np.inf, -np.inf], 0)
 
     # z_score
     def scale(x):
@@ -62,7 +70,7 @@ def process_factors(daily_factors,data,industry):
 
 def process_return(data):
     data = data.reset_index()
-    data['return'] = np.log(data.groupby(['asset'])['adj_open_price'].shift(-2)/data.groupby(['asset'])['adj_open_price'].shift(-1))
+    data['return'] = np.log(data['shift_adj_open_price']/data['adj_open_price'])
     return data[['asset','datetime','return']].fillna(0)
 
 
@@ -80,6 +88,7 @@ def main():
     df = pd.merge(daily_factors,df_return,how='inner',on=['asset','datetime']).sort_values(['datetime','asset'])
     df['datetime'] = df['datetime'].astype(str)
     df['return'] = (df.groupby(['datetime'])['return'].rank(pct=True) - 0.5)*3.4624
+    # df['return'] = df.groupby(['datetime'])['return'].apply(lambda x: (x-x.mean())/x.std()).fillna(0)
 
     data_feature = df.iloc[:,2:-1]
     data_label = df.iloc[:,-1]
